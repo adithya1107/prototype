@@ -1,63 +1,30 @@
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "@/components/ui/use-toast";
-import { Link, useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { Session, User } from '@supabase/supabase-js';
 
-interface CollegeData {
-  id: string;
-  code: string;
-  name: string;
-  logo: string;
-  primary_color: string;
-  secondary_color: string;
-}
-
 const MultiStepLogin = () => {
   const navigate = useNavigate();
-  const [step, setStep] = useState(1);
-  const [collegeCode, setCollegeCode] = useState('');
-  const [userCode, setUserCode] = useState('');
-  const [password, setPassword] = useState('');
-  const [collegeData, setCollegeData] = useState<CollegeData | null>(null);
-  const [userEmail, setUserEmail] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [session, setSession] = useState<Session | null>(null);
   const [user, setUser] = useState<User | null>(null);
-  const [isSignUp, setIsSignUp] = useState(false);
-  
-  // Signup form data
-  const [signupData, setSignupData] = useState({
-    firstName: '',
-    lastName: '',
-    email: '',
-    userType: 'student' as 'student' | 'faculty' | 'parent' | 'alumni' | 'super_admin' | 'staff',
-    customUserCode: '',
-    generatePassword: '',
-    confirmPassword: ''
-  });
 
   // Set up auth state listener
   useEffect(() => {
-    // Set up auth state listener FIRST
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
-  async (event, session) => {
-    setSession(session);
-    setUser(session?.user ?? null);
-    
-    // If user is authenticated, fetch their profile and redirect
-    if (session?.user && event === 'SIGNED_IN') {
-      await handleAuthenticatedUser(session.user);
-    }
-  }
-);
+      async (event, session) => {
+        setSession(session);
+        setUser(session?.user ?? null);
+        
+        if (session?.user && event === 'SIGNED_IN') {
+          await handleAuthenticatedUser(session.user);
+        }
+      }
+    );
 
-    // THEN check for existing session
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
       setUser(session?.user ?? null);
@@ -68,7 +35,6 @@ const MultiStepLogin = () => {
 
   const handleAuthenticatedUser = async (user: User) => {
     try {
-      // Get user profile data from user_profiles table
       const { data: profile, error } = await supabase
         .from('user_profiles')
         .select('*')
@@ -85,7 +51,6 @@ const MultiStepLogin = () => {
         return;
       }
 
-      // Store user data for legacy compatibility
       const userData = {
         user_id: profile.id,
         user_type: profile.user_type,
@@ -98,7 +63,6 @@ const MultiStepLogin = () => {
 
       localStorage.setItem('colcord_user', JSON.stringify(userData));
 
-      // Redirect based on user type
       const userRoutes = {
         'student': '/student',
         'faculty': '/teacher',
@@ -116,152 +80,40 @@ const MultiStepLogin = () => {
     }
   };
 
-  const handleCollegeCodeSubmit = async () => {
-    if (!collegeCode) {
-      toast({
-        title: 'College Code Required',
-        description: 'Please enter your college code',
-        variant: 'destructive',
-      });
-      return;
-    }
-
+  const handleDirectLogin = async (userType: string) => {
     setIsLoading(true);
 
-    try {
-      const { data, error } = await supabase.rpc('get_college_by_code', { college_code: collegeCode });
-
-      if (error) throw error;
-
-      if (!data || data.length === 0) {
-        toast({
-          title: 'Invalid College Code',
-          description: 'No college found with this code',
-          variant: 'destructive',
-        });
-        return;
-      }
-
-      setCollegeData(data[0] as CollegeData);
-      setStep(2);
-    } catch (error) {
-      console.error('College code validation error:', error);
-      toast({
-        title: 'College Code Error',
-        description: 'Failed to validate college code. Please try again.',
-        variant: 'destructive',
-      });
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const handleUserCodeSubmit = async () => {
-    if (!userCode) {
-      toast({
-        title: 'User Code Required',
-        description: 'Please enter your user code',
-        variant: 'destructive',
-      });
-      return;
-    }
-
-    setIsLoading(true);
+    const credentials = {
+      student: { email: 'student@demo.com', password: '123456' },
+      faculty: { email: 'faculty@demo.com', password: '123456' },
+      admin: { email: 'admin@demo.com', password: '123456' },
+      alumni: { email: 'alumni@demo.com', password: '123456' },
+      parent: { email: 'parent@demo.com', password: '123456' }
+    };
 
     try {
-      // Get user email using the new secure function
-      const { data, error } = await supabase.rpc('get_user_email', {
-        college_code: collegeData?.code || '',
-        user_code: userCode
-      });
-
-      if (error) throw error;
-
-      const userResult = data?.[0];
-
-      if (!userResult?.email) {
-        toast({
-          title: 'Invalid User Code',
-          description: 'This user code does not exist in this college',
-          variant: 'destructive',
-        });
-        return;
-      }
-
-      setUserEmail(userResult.email);
-      setStep(3);
-    } catch (error) {
-      console.error('User code validation error:', error);
-      toast({
-        title: 'User Code Error',
-        description: 'Failed to validate user code. Please try again.',
-        variant: 'destructive',
-      });
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const handleLogin = async () => {
-    if (!password) {
-      toast({
-        title: 'Password Required',
-        description: 'Please enter your password',
-        variant: 'destructive',
-      });
-      return;
-    }
-
-    if (!userEmail) {
-      toast({
-        title: 'Error',
-        description: 'User email not found. Please start over.',
-        variant: 'destructive',
-      });
-      return;
-    }
-
-    setIsLoading(true);
-
-    try {
-      // Use Supabase auth with email and password
+      const { email, password } = credentials[userType as keyof typeof credentials];
+      
       const { data, error } = await supabase.auth.signInWithPassword({
-        email: userEmail,
+        email: email,
         password: password
       });
 
       if (error) {
         console.error('Login error:', error);
-        
-        // Handle specific auth errors
-        if (error.message.includes('Invalid login credentials')) {
-          toast({
-            title: 'Login Failed',
-            description: 'Invalid password. Please check your credentials.',
-            variant: 'destructive',
-          });
-        } else if (error.message.includes('Email not confirmed')) {
-          toast({
-            title: 'Email Not Confirmed',
-            description: 'Please check your email and confirm your account.',
-            variant: 'destructive',
-          });
-        } else {
-          toast({
-            title: 'Login Error',
-            description: error.message || 'An error occurred during login.',
-            variant: 'destructive',
-          });
-        }
+        toast({
+          title: 'Login Failed',
+          description: error.message || 'An error occurred during login.',
+          variant: 'destructive',
+        });
         return;
       }
 
       if (data.user) {
         toast({
           title: 'Login Successful',
-          description: 'Welcome back! Redirecting to your dashboard...',
+          description: `Welcome ${userType}! Redirecting to your dashboard...`,
         });
-        // Auth state change will handle the redirect
       }
     } catch (error) {
       console.error('Unexpected login error:', error);
@@ -275,198 +127,6 @@ const MultiStepLogin = () => {
     }
   };
 
-  const handleSignupSubmit = async () => {
-    // Validation
-    if (!signupData.firstName || !signupData.lastName || !signupData.email) {
-      toast({
-        title: 'Missing Information',
-        description: 'Please fill in all required fields',
-        variant: 'destructive',
-      });
-      return;
-    }
-
-    if (!signupData.customUserCode) {
-      toast({
-        title: 'User Code Required',
-        description: 'Please enter your preferred user code',
-        variant: 'destructive',
-      });
-      return;
-    }
-
-    if (!signupData.generatePassword || signupData.generatePassword.length < 6) {
-      toast({
-        title: 'Password Too Short',
-        description: 'Password must be at least 6 characters long',
-        variant: 'destructive',
-      });
-      return;
-    }
-
-    if (signupData.generatePassword !== signupData.confirmPassword) {
-      toast({
-        title: 'Password Mismatch',
-        description: 'Passwords do not match',
-        variant: 'destructive',
-      });
-      return;
-    }
-
-    if (!collegeData) {
-      toast({
-        title: 'College Not Selected',
-        description: 'Please go back and select a college',
-        variant: 'destructive',
-      });
-      return;
-    }
-
-    setIsLoading(true);
-
-    try {
-      // Check if user code already exists
-      const { data: existingUser, error: checkError } = await supabase.rpc('get_user_email', {
-        college_code: collegeData.code,
-        user_code: signupData.customUserCode
-      });
-
-      if (checkError) throw checkError;
-
-      if (existingUser && existingUser[0]?.user_exists) {
-        toast({
-          title: 'User Code Taken',
-          description: 'This user code is already in use. Please choose another.',
-          variant: 'destructive',
-        });
-        setIsLoading(false);
-        return;
-      }
-
-      // Create the user in Supabase Auth
-      const { data: authData, error: authError } = await supabase.auth.signUp({
-        email: signupData.email,
-        password: signupData.generatePassword,
-        options: {
-          emailRedirectTo: `${window.location.origin}/`,
-          data: {
-            college_id: collegeData.id,
-            user_code: signupData.customUserCode,
-            user_type: signupData.userType,
-            first_name: signupData.firstName,
-            last_name: signupData.lastName
-          }
-        }
-      });
-
-      if (authError) {
-        console.error('Signup auth error:', authError);
-        
-        if (authError.message.includes('User already registered')) {
-          toast({
-            title: 'Email Already Registered',
-            description: 'This email is already registered. Please use the login option.',
-            variant: 'destructive',
-          });
-        } else {
-          toast({
-            title: 'Signup Error',
-            description: authError.message || 'An error occurred during signup.',
-            variant: 'destructive',
-          });
-        }
-        return;
-      }
-
-      if (authData.user) {
-        toast({
-          title: 'Signup Successful!',
-          description: 'Please check your email to confirm your account, then you can login.',
-        });
-        
-        // Reset form and switch to login mode
-        setIsSignUp(false);
-        setStep(1);
-        setSignupData({
-          firstName: '',
-          lastName: '',
-          email: '',
-          userType: 'student',
-          customUserCode: '',
-          generatePassword: '',
-          confirmPassword: ''
-        });
-        setCollegeCode('');
-        setUserCode('');
-        setPassword('');
-        setCollegeData(null);
-        setUserEmail('');
-      }
-    } catch (error) {
-      console.error('Unexpected signup error:', error);
-      toast({
-        title: 'Signup Error',
-        description: 'An unexpected error occurred. Please try again.',
-        variant: 'destructive',
-      });
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const resetForm = () => {
-    setStep(1);
-    setCollegeCode('');
-    setUserCode('');
-    setPassword('');
-    setCollegeData(null);
-    setUserEmail('');
-    setSignupData({
-      firstName: '',
-      lastName: '',
-      email: '',
-      userType: 'student',
-      customUserCode: '',
-      generatePassword: '',
-      confirmPassword: ''
-    });
-  };
-
-  const toggleMode = () => {
-    setIsSignUp(!isSignUp);
-    resetForm();
-  };
-
-  const handleSkipLogin = (role: 'admin' | 'teacher' | 'student') => {
-    // Create mock user data for development/testing
-    const mockUserData = {
-      user_id: `mock-${role}-id`,
-      user_type: role === 'teacher' ? 'faculty' : role,
-      first_name: role === 'admin' ? 'Admin' : role === 'teacher' ? 'Teacher' : 'Student',
-      last_name: 'User',
-      college_id: 'mock-college-id',
-      user_code: `${role.toUpperCase()}001`,
-      email: `${role}@example.com`
-    };
-
-    // Store mock user data
-    localStorage.setItem('colcord_user', JSON.stringify(mockUserData));
-
-    // Navigate to appropriate dashboard
-    const routes = {
-      'admin': '/admin',
-      'teacher': '/teacher',
-      'student': '/student'
-    };
-
-    navigate(routes[role]);
-    
-    toast({
-      title: 'Development Mode',
-      description: `Logged in as ${role} for testing purposes`,
-    });
-  };
-
   return (
     <div className="min-h-screen bg-background flex items-center justify-center px-4">
       {/* Background Grid Pattern */}
@@ -476,329 +136,93 @@ const MultiStepLogin = () => {
         {/* Hero Section */}
         <div className="text-center mb-macro-md animate-fade-in-up">
           <h1 className="text-hero text-foreground mb-4">
-            {collegeData ? collegeData.name : 'ColCord'}
+            TAPMI
           </h1>
           <p className="text-body-large text-muted-foreground">
             Built for India. Global Standards.
           </p>
-          {step > 1 && (
-            <div className="mt-6 flex items-center justify-center space-x-2">
-              <div className="h-0.5 w-8 bg-primary"></div>
-              <span className="text-xs text-muted-foreground font-medium">STEP {step} OF 3</span>
-              <div className="h-0.5 w-8 bg-white-10"></div>
-            </div>
-          )}
         </div>
 
-        {/* Fixed height and width card container */}
-        <Card className="border-border bg-card backdrop-blur-sm h-[300px] w-full flex flex-col">
+        {/* Card container */}
+        <Card className="border-border bg-card backdrop-blur-sm h-[400px] w-full flex flex-col">
           <CardHeader className="pb-4 flex-shrink-0">
             <CardTitle className="text-section-header text-center text-card-foreground">
-              {!isSignUp ? (
-                <>
-                  {step === 1 && 'College Access'}
-                  {step === 2 && 'User Verification'}
-                  {step === 3 && 'Secure Login'}
-                </>
-              ) : (
-                <>
-                  {step === 1 && 'Select College'}
-                  {step === 2 && 'Create Account'}
-                </>
-              )}
+              Select Your Role
             </CardTitle>
           </CardHeader>
           
-          {/* Content area with fixed height and flex-grow */}
+          {/* Content area with login buttons */}
           <CardContent className="flex-grow flex flex-col justify-center px-6">
-            {/* Login Flow */}
-            {!isSignUp && step === 1 && (
-              <div className="space-y-4 animate-fade-in">
-                <div className="space-y-2">
-                  <Label htmlFor="collegeCode" className="text-sm font-medium text-foreground">
-                    College Code
-                  </Label>
-                  <Input
-                    id="collegeCode"
-                    placeholder="Enter your college code"
-                    type="text"
-                    value={collegeCode}
-                    onChange={(e) => setCollegeCode(e.target.value)}
-                    className="bg-input border-border text-foreground placeholder:text-muted-foreground focus-ring"
-                  />
-                </div>
-                <Button 
-                  onClick={handleCollegeCodeSubmit} 
-                  disabled={isLoading}
-                  className="w-full h-12 bg-primary text-primary-foreground hover:bg-primary/90 font-medium transition-all duration-300 hover-scale focus-ring"
-                >
-                  {isLoading ? (
-                    <div className="flex items-center space-x-2">
-                      <div className="h-4 w-4 border-2 border-primary-foreground/30 border-t-primary-foreground rounded-full animate-spin"></div>
-                      <span>Validating...</span>
-                    </div>
-                  ) : 'Continue'}
-                </Button>
-              </div>
-            )}
-
-            {!isSignUp && step === 2 && (
-              <div className="space-y-4 animate-fade-in">
-                <div className="space-y-2">
-                  <Label htmlFor="userCode" className="text-sm font-medium text-foreground">
-                    User Code
-                  </Label>
-                  <Input
-                    id="userCode"
-                    placeholder="Enter your user code"
-                    type="text"
-                    value={userCode}
-                    onChange={(e) => setUserCode(e.target.value)}
-                    className="bg-input border-border text-foreground placeholder:text-muted-foreground focus-ring"
-                  />
-                </div>
-                <Button 
-                  onClick={handleUserCodeSubmit} 
-                  disabled={isLoading}
-                  className="w-full h-12 bg-primary text-primary-foreground hover:bg-primary/90 font-medium transition-all duration-300 hover-scale focus-ring"
-                >
-                  {isLoading ? (
-                    <div className="flex items-center space-x-2">
-                      <div className="h-4 w-4 border-2 border-primary-foreground/30 border-t-primary-foreground rounded-full animate-spin"></div>
-                      <span>Validating...</span>
-                    </div>
-                  ) : 'Continue'}
-                </Button>
-              </div>
-            )}
-
-            {!isSignUp && step === 3 && (
-              <div className="space-y-4 animate-fade-in">
-                <div className="space-y-2">
-                  <Label htmlFor="password" className="text-sm font-medium text-foreground">
-                    Password
-                  </Label>
-                  <Input
-                    id="password"
-                    placeholder="Enter your password"
-                    type="password"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    className="bg-input border-border text-foreground placeholder:text-muted-foreground focus-ring"
-                  />
-                </div>
-                <Button 
-                  onClick={handleLogin} 
-                  disabled={isLoading}
-                  className="w-full h-12 bg-primary text-primary-foreground hover:bg-primary/90 font-medium transition-all duration-300 hover-scale focus-ring"
-                >
-                  {isLoading ? (
-                    <div className="flex items-center space-x-2">
-                      <div className="h-4 w-4 border-2 border-primary-foreground/30 border-t-primary-foreground rounded-full animate-spin"></div>
-                      <span>Logging in...</span>
-                    </div>
-                  ) : 'Access Portal'}
-                </Button>
-              </div>
-            )}
-
-            {/* Signup Flow */}
-            {/* {isSignUp && step === 1 && (
-              <div className="space-y-4 animate-fade-in">
-                <div className="space-y-2">
-                  <Label htmlFor="signupCollegeCode" className="text-sm font-medium text-foreground">
-                    College Code
-                  </Label>
-                  <Input
-                    id="signupCollegeCode"
-                    placeholder="Enter your college code"
-                    type="text"
-                    value={collegeCode}
-                    onChange={(e) => setCollegeCode(e.target.value)}
-                    className="bg-input border-border text-foreground placeholder:text-muted-foreground focus-ring"
-                  />
-                </div>
-                <Button 
-                  onClick={handleCollegeCodeSubmit} 
-                  disabled={isLoading}
-                  className="w-full h-12 bg-primary text-primary-foreground hover:bg-primary/90 font-medium transition-all duration-300 hover-scale focus-ring"
-                >
-                  {isLoading ? (
-                    <div className="flex items-center space-x-2">
-                      <div className="h-4 w-4 border-2 border-primary-foreground/30 border-t-primary-foreground rounded-full animate-spin"></div>
-                      <span>Validating...</span>
-                    </div>
-                  ) : 'Continue'}
-                </Button>
-              </div>
-            )}
-
-            {isSignUp && step === 2 && (
-              <div className="space-y-4 animate-fade-in">
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="space-y-2">
-                    <Label htmlFor="firstName" className="text-sm font-medium text-foreground">
-                      First Name
-                    </Label>
-                    <Input
-                      id="firstName"
-                      placeholder="First name"
-                      type="text"
-                      value={signupData.firstName}
-                      onChange={(e) => setSignupData({...signupData, firstName: e.target.value})}
-                      className="bg-input border-border text-foreground placeholder:text-muted-foreground focus-ring"
-                    />
+            <div className="space-y-4 animate-fade-in">
+              <Button 
+                onClick={() => handleDirectLogin('student')} 
+                disabled={isLoading}
+                className="w-full h-12 bg-primary text-primary-foreground hover:bg-primary/90 font-medium transition-all duration-300 hover-scale focus-ring"
+              >
+                {isLoading ? (
+                  <div className="flex items-center space-x-2">
+                    <div className="h-4 w-4 border-2 border-primary-foreground/30 border-t-primary-foreground rounded-full animate-spin"></div>
+                    <span>Logging in...</span>
                   </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="lastName" className="text-sm font-medium text-foreground">
-                      Last Name
-                    </Label>
-                    <Input
-                      id="lastName"
-                      placeholder="Last name"
-                      type="text"
-                      value={signupData.lastName}
-                      onChange={(e) => setSignupData({...signupData, lastName: e.target.value})}
-                      className="bg-input border-border text-foreground placeholder:text-muted-foreground focus-ring"
-                    />
+                ) : 'Login as Student'}
+              </Button>
+
+              <Button 
+                onClick={() => handleDirectLogin('faculty')} 
+                disabled={isLoading}
+                className="w-full h-12 bg-primary text-primary-foreground hover:bg-primary/90 font-medium transition-all duration-300 hover-scale focus-ring"
+              >
+                {isLoading ? (
+                  <div className="flex items-center space-x-2">
+                    <div className="h-4 w-4 border-2 border-primary-foreground/30 border-t-primary-foreground rounded-full animate-spin"></div>
+                    <span>Logging in...</span>
                   </div>
-                </div>
+                ) : 'Login as Faculty'}
+              </Button>
 
-                <div className="space-y-2">
-                  <Label htmlFor="email" className="text-sm font-medium text-foreground">
-                    Email Address
-                  </Label>
-                  <Input
-                    id="email"
-                    placeholder="your.email@example.com"
-                    type="email"
-                    value={signupData.email}
-                    onChange={(e) => setSignupData({...signupData, email: e.target.value})}
-                    className="bg-input border-border text-foreground placeholder:text-muted-foreground focus-ring"
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="userType" className="text-sm font-medium text-foreground">
-                    User Type
-                  </Label>
-                  <Select value={signupData.userType} onValueChange={(value: any) => setSignupData({...signupData, userType: value})}>
-                    <SelectTrigger className="bg-input border-border text-foreground focus-ring">
-                      <SelectValue placeholder="Select your role" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="student">Student</SelectItem>
-                      <SelectItem value="faculty">Faculty</SelectItem>
-                      <SelectItem value="parent">Parent</SelectItem>
-                      <SelectItem value="alumni">Alumni</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="customUserCode" className="text-sm font-medium text-foreground">
-                    Custom User Code
-                  </Label>
-                  <Input
-                    id="customUserCode"
-                    placeholder="Choose your user code (e.g., JOHN2024)"
-                    type="text"
-                    value={signupData.customUserCode}
-                    onChange={(e) => setSignupData({...signupData, customUserCode: e.target.value.toUpperCase()})}
-                    className="bg-input border-border text-foreground placeholder:text-muted-foreground focus-ring"
-                  />
-                </div>
-
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="space-y-2">
-                    <Label htmlFor="generatePassword" className="text-sm font-medium text-foreground">
-                      Password
-                    </Label>
-                    <Input
-                      id="generatePassword"
-                      placeholder="Password"
-                      type="password"
-                      value={signupData.generatePassword}
-                      onChange={(e) => setSignupData({...signupData, generatePassword: e.target.value})}
-                      className="bg-input border-border text-foreground placeholder:text-muted-foreground focus-ring"
-                    />
+              <Button 
+                onClick={() => handleDirectLogin('admin')} 
+                disabled={isLoading}
+                className="w-full h-12 bg-primary text-primary-foreground hover:bg-primary/90 font-medium transition-all duration-300 hover-scale focus-ring"
+              >
+                {isLoading ? (
+                  <div className="flex items-center space-x-2">
+                    <div className="h-4 w-4 border-2 border-primary-foreground/30 border-t-primary-foreground rounded-full animate-spin"></div>
+                    <span>Logging in...</span>
                   </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="confirmPassword" className="text-sm font-medium text-foreground">
-                      Confirm Password
-                    </Label>
-                    <Input
-                      id="confirmPassword"
-                      placeholder="Confirm password"
-                      type="password"
-                      value={signupData.confirmPassword}
-                      onChange={(e) => setSignupData({...signupData, confirmPassword: e.target.value})}
-                      className="bg-input border-border text-foreground placeholder:text-muted-foreground focus-ring"
-                    />
-                  </div>
-                </div>
+                ) : 'Login as Admin'}
+              </Button>
 
-                <Button 
-                  onClick={handleSignupSubmit} 
-                  disabled={isLoading}
-                  className="w-full h-12 bg-primary text-primary-foreground hover:bg-primary/90 font-medium transition-all duration-300 hover-scale focus-ring"
-                >
-                  {isLoading ? (
-                    <div className="flex items-center space-x-2">
-                      <div className="h-4 w-4 border-2 border-primary-foreground/30 border-t-primary-foreground rounded-full animate-spin"></div>
-                      <span>Creating Account...</span>
-                    </div>
-                  ) : 'Create Account'}
-                </Button>
-              </div>
-            )} */}
+              <Button 
+                onClick={() => handleDirectLogin('alumni')} 
+                disabled={isLoading}
+                className="w-full h-12 bg-primary text-primary-foreground hover:bg-primary/90 font-medium transition-all duration-300 hover-scale focus-ring"
+              >
+                {isLoading ? (
+                  <div className="flex items-center space-x-2">
+                    <div className="h-4 w-4 border-2 border-primary-foreground/30 border-t-primary-foreground rounded-full animate-spin"></div>
+                    <span>Logging in...</span>
+                  </div>
+                ) : 'Login as Alumni'}
+              </Button>
+
+              <Button 
+                onClick={() => handleDirectLogin('parent')} 
+                disabled={isLoading}
+                className="w-full h-12 bg-primary text-primary-foreground hover:bg-primary/90 font-medium transition-all duration-300 hover-scale focus-ring"
+              >
+                {isLoading ? (
+                  <div className="flex items-center space-x-2">
+                    <div className="h-4 w-4 border-2 border-primary-foreground/30 border-t-primary-foreground rounded-full animate-spin"></div>
+                    <span>Logging in...</span>
+                  </div>
+                ) : 'Login as Parent'}
+              </Button>
+            </div>
           </CardContent>
           
-          {/* Footer section with fixed height */}
-          <div className="px-6 pb-6 space-y-4 flex-shrink-0">
-            {/* Skip Login Buttons for Development */}
-            {/* <div className="space-y-3">
-              <div className="text-center">
-                <p className="text-xs text-muted-foreground mb-3">Development Mode - Skip Login</p>
-                <div className="flex gap-2 justify-center">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => handleSkipLogin('admin')}
-                    className="text-xs"
-                  >
-                    Skip as Admin
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => handleSkipLogin('teacher')}
-                    className="text-xs"
-                  >
-                    Skip as Teacher
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => handleSkipLogin('student')}
-                    className="text-xs"
-                  >
-                    Skip as Student
-                  </Button>
-                </div>
-              </div>
-              
-              <div className="text-center">
-                <Button
-                  variant="ghost"
-                  onClick={toggleMode}
-                  className="text-sm text-muted-foreground hover:text-foreground underline-offset-4 hover:underline"
-                >
-                  {isSignUp ? 'Already have an account? Login' : "Don't have an account? Sign up"}
-                </Button>
-              </div>
-            </div>
-             */}
+          {/* Footer section */}
+          <div className="px-6 pb-6 flex-shrink-0">
             <div className="text-center">
               <a 
                 href="https://colcord.co.in/contact" 
