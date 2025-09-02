@@ -136,7 +136,7 @@ const MultiStepLogin = () => {
         {/* Hero Section */}
         <div className="text-center mb-macro-md animate-fade-in-up">
           <h1 className="text-hero text-foreground mb-4">
-            TAPMI
+            ColCord
           </h1>
           <p className="text-body-large text-muted-foreground">
             Built for India. Global Standards.
